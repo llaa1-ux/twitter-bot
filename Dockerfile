@@ -1,14 +1,14 @@
-# Imagem base
+# Usando Python 3.10
 FROM python:3.10-slim
 
-# Criar diretório de trabalho
+# Define diretório de trabalho
 WORKDIR /app
 
-# Copiar arquivos para o container
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
+# Copia arquivos do projeto
 COPY . .
 
-# Comando para iniciar o bot
+# Instala dependências
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Comando para rodar o bot
 CMD ["python", "bot_twitter.py"]
