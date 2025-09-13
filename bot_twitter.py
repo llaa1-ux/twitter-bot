@@ -2,13 +2,11 @@ import os
 import asyncio
 import yt_dlp
 from telegram import Update, InputMediaPhoto, InputMediaVideo
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, webhook
 
-# ▼▼▼ TOKEN DO BOT ▼▼▼
 TOKEN = os.getenv("TOKEN")
-# ▲▲▲ TOKEN DO BOT ▲▲▲
+PORT = int(os.environ.get("PORT", "5000"))  # Render define a porta via variável de ambiente
 
-# Pasta para downloads temporários
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
@@ -17,12 +15,11 @@ def baixar_midias(url: str):
     ydl_opts = {
         "outtmpl": f"{DOWNLOAD_DIR}/%(id)s.%(ext)s",
         "quiet": True,
-        "merge_output_format": "mp4",  # combina áudio + vídeo
+        "merge_output_format": "mp4",
         "noplaylist": False,
-        "format": "bestvideo+bestaudio/best",  # melhor qualidade
+        "format": "bestvideo+bestaudio/best",
     }
 
-    # Cookies para NSFW
     if os.path.exists("cookies_twitter.txt"):
         ydl_opts["cookiefile"] = "cookies_twitter.txt"
 
@@ -31,8 +28,6 @@ def baixar_midias(url: str):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             info = ydl.extract_info(url, download=False)
-
-            # Carrossel / múltiplas mídias
             if "entries" in info and info["entries"]:
                 for entry in info["entries"]:
                     entry_info = ydl.extract_info(entry["url"], download=True)
@@ -40,7 +35,6 @@ def baixar_midias(url: str):
             else:
                 info_download = ydl.extract_info(url, download=True)
                 arquivos.append(ydl.prepare_filename(info_download))
-
         except Exception as e:
             print(f"Erro no download: {e}")
             return []
@@ -50,8 +44,7 @@ def baixar_midias(url: str):
 # Comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Olá! 👋 Envie um link do Twitter/X que eu baixo vídeos e fotos para você.\n"
-        "Posts com várias mídias também serão baixados."
+        "Olá! 👋 Envie um link do Twitter/X que eu baixo vídeos e fotos para você."
     )
 
 # Quando usuário envia link
@@ -67,8 +60,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if not media_paths:
                 await processing_msg.edit_text(
-                    "❌ Não foi possível baixar nenhuma mídia.\n"
-                    "O post pode ser privado ou os cookies expiraram."
+                    "❌ Não foi possível baixar nenhuma mídia."
                 )
                 return
 
@@ -82,18 +74,12 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 elif ext.endswith((".jpg", ".jpeg", ".png", ".webp")):
                     media_group.append(InputMediaPhoto(files_to_send[i]))
 
-            # Envia mídias em grupos de até 10
             for i in range(0, len(media_group), 10):
                 await update.message.reply_media_group(media_group[i:i+10])
 
             await processing_msg.delete()
-
         else:
             await processing_msg.edit_text("❌ Por favor, envie um link válido do Twitter/X.")
-
-    except Exception as e:
-        await processing_msg.edit_text(f"❌ Ocorreu um erro: {e}")
-
     finally:
         if 'files_to_send' in locals():
             for f in files_to_send:
@@ -105,13 +91,24 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except OSError as e:
                     print(f"Erro ao remover arquivo {path}: {e}")
 
-# Rodar bot
-def main():
+# Iniciar webhook
+async def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_link))
-    print("🤖 Bot rodando...")
-    app.run_polling()
+
+    # Define URL do webhook (substitua pelo seu subdomínio Render)
+    webhook_url = f"https://SEU_APP.onrender.com/{TOKEN}"
+
+    # Remove webhook antigo (se houver)
+    await app.bot.delete_webhook()
+    await app.bot.set_webhook(webhook_url)
+
+    # Starta um servidor HTTP no Render
+    await app.start()
+    await app.updater.start_polling()  # apenas para integração, não conflita com webhook
+    await app.idle()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
