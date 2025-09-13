@@ -2,18 +2,17 @@ import os
 import asyncio
 import yt_dlp
 from telegram import Update, InputMediaPhoto, InputMediaVideo
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ApplicationBuilder
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# ▼▼▼ TOKEN DO BOT ▼▼▼
-TOKEN = os.environ.get("TOKEN")  # Defina a variável de ambiente TOKEN no Render
-# ▲▲▲ TOKEN DO BOT ▲▲▲
+# Token do bot
+TOKEN = os.getenv("TOKEN")  # render vai usar variável de ambiente
 
-# Pasta para downloads temporários
+# URL pública do seu serviço
+URL = os.getenv("RENDER_EXTERNAL_URL")  # Render já fornece isso
+
+# Pasta temporária para downloads
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-
-# URL pública do Render (substitua pelo seu domínio no Render)
-BASE_URL = os.environ.get("RENDER_EXTERNAL_URL")  # Ex: https://twitter-bot.onrender.com
 
 # Função para baixar mídias do Twitter
 def baixar_midias(url: str):
@@ -24,17 +23,13 @@ def baixar_midias(url: str):
         "noplaylist": False,
         "format": "bestvideo+bestaudio/best",
     }
-
-    # Cookies para NSFW
     if os.path.exists("cookies_twitter.txt"):
         ydl_opts["cookiefile"] = "cookies_twitter.txt"
 
     arquivos = []
-
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             info = ydl.extract_info(url, download=False)
-
             if "entries" in info and info["entries"]:
                 for entry in info["entries"]:
                     entry_info = ydl.extract_info(entry["url"], download=True)
@@ -42,11 +37,9 @@ def baixar_midias(url: str):
             else:
                 info_download = ydl.extract_info(url, download=True)
                 arquivos.append(ydl.prepare_filename(info_download))
-
         except Exception as e:
             print(f"Erro no download: {e}")
             return []
-
     return arquivos
 
 # Comando /start
@@ -84,6 +77,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 elif ext.endswith((".jpg", ".jpeg", ".png", ".webp")):
                     media_group.append(InputMediaPhoto(files_to_send[i]))
 
+            # Envia mídias em grupos de até 10
             for i in range(0, len(media_group), 10):
                 await update.message.reply_media_group(media_group[i:i+10])
 
@@ -106,20 +100,20 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except OSError as e:
                     print(f"Erro ao remover arquivo {path}: {e}")
 
-# Função principal com webhook
+# Rodar bot com webhook
 def main():
-    port = int(os.environ.get("PORT", 8443))
     app = Application.builder().token(TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_link))
 
-    # Configura webhook
+    PORT = int(os.environ.get("PORT", 8443))  # Render define a porta
     app.run_webhook(
         listen="0.0.0.0",
-        port=port,
-        webhook_url=f"{BASE_URL}/webhook/{TOKEN}"
+        port=PORT,
+        url_path=TOKEN,
+        webhook_url=f"{URL}/{TOKEN}"
     )
+    print("🤖 Bot rodando via webhook...")
 
 if __name__ == "__main__":
     main()
